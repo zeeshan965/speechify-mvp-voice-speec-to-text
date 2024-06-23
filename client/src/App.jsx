@@ -1,38 +1,58 @@
-import { useEffect } from "react";
-import useAudioRecorder from "./useAudioRecorder";
-import useSocket from "./useSocket";
-
-// IMPORTANT: To ensure proper functionality and microphone access, please follow these steps:
-// 1. Access the site using 'localhost' instead of the local IP address.
-// 2. When prompted, grant microphone permissions to the site to enable audio recording.
-// Failure to do so may result in issues with audio capture and transcription.
-// NOTE: Don't use createPortal()
+import { useEffect, useState } from 'react';
+import useAudioRecorder from './useAudioRecorder';
+import useSocket from './useSocket';
 
 function App() {
-  const { initialize } = useSocket();
+    const { initialize, sendAudio, configureStream, stopStream, transcriptions } = useSocket();
+    const { startRecording, stopRecording, isRecording } = useAudioRecorder({
+        dataCb: (data) => sendAudio(data),
+    });
 
-  useEffect(() => {
-    // Note: must connect to server on page load but don't start transcriber
-    initialize();
-  }, []);
+    const [text, setText] = useState("");
 
-  const { startRecording, stopRecording, isRecording } = useAudioRecorder({
-    dataCb: (data) => {},
-  });
+    useEffect(() => {
+        initialize();
+    }, []);
 
-  const onStartRecordingPress = async () => {
-    // start recorder and transcriber (send configure-stream)
-  };
+    const onStartRecordingPress = async () => {
+        const sampleRate = await startRecording();
+        configureStream(sampleRate);
+    };
 
-  const onStopRecordingPress = async () => {};
+    const onStopRecordingPress = async () => {
+        stopRecording();
+        stopStream();
+    };
 
-  // ... add more functions
-  return (
-    <div>
-      <h1>Speechify Voice Notes</h1>
-      <p>Record or type something in the textbox.</p>
-    </div>
-  );
+    const handleClear = () => {
+        setText("");
+        setTranscriptions({ partial: "", final: "" });
+    }
+
+    return (
+        <div>
+            <h1>Speechify Voice Notes</h1>
+            <p>Record or type something in the textbox.</p>
+            <button onClick={onStartRecordingPress} disabled={isRecording}>
+                Start Recording
+            </button>
+            <button onClick={onStopRecordingPress} disabled={!isRecording}>
+                Stop Recording
+            </button>
+            <textarea
+                value={transcriptions.partial || transcriptions.final || text}
+                onChange={(e) => setText(e.target.value)}
+                rows="10"
+                cols="50"
+            />
+            <button onClick={() => navigator.clipboard.writeText(transcriptions.final || text)}>
+                Copy Transcription
+            </button>
+            <button onClick={handleClear}>
+                Clear Transcription
+            </button>
+        </div>
+    );
 }
 
 export default App;

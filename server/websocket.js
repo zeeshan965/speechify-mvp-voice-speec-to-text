@@ -1,28 +1,58 @@
-import Transcriber from "./transcriber.js";
-
-/**
- * Events to subscribe to:
- * - connection: Triggered when a client connects to the server.
- * - configure-stream: Requires an object with a 'sampleRate' property.
- * - incoming-audio: Requires audio data as the parameter.
- * - stop-stream: Triggered when the client requests to stop the transcription stream.
- * - disconnect: Triggered when a client disconnects from the server.
- *
- *
- * Events to emit:
- * - transcriber-ready: Emitted when the transcriber is ready.
- * - final: Emits the final transcription result (string).
- * - partial: Emits the partial transcription result (string).
- * - error: Emitted when an error occurs.
- */
+import Transcriber from './transcriber.js';
 
 const initializeWebSocket = (io) => {
-  io.on("connection", (socket) => {
+  io.on('connection', (socket) => {
     console.log(`connection made (${socket.id})`);
 
-    // ... add needed event handlers and logic
-  });
+    let transcriber;
+    socket.on('configure-stream', async ({ sampleRate }) => {
+      try {
+        transcriber = new Transcriber();
+        await transcriber.startTranscriptionStream(sampleRate);
 
+        transcriber.on('partial', (result) => {
+          socket.emit('partial', result);
+        });
+
+        transcriber.on('final', (result) => {
+          socket.emit('final', result);
+        });
+
+        transcriber.on('error', (error) => {
+          socket.emit('error', error);
+        });
+
+        transcriber.on('transcriber-ready', () => {
+          console.log('Transcriber ready');
+        });
+
+      } catch (error) {
+        console.error('Error initializing transcriber:', error);
+        socket.emit('error', error.message);
+      }
+    });
+
+    socket.on('incoming-audio', (audioData) => {
+      if (transcriber) {
+        transcriber.send(audioData);
+      }
+    });
+
+    socket.on('stop-stream', () => {
+      if (transcriber) {
+        transcriber.endTranscriptionStream();
+      } else {
+        console.warn('Transcriber is not initialized yet. Make sure to configure-stream first.');
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`connection closed (${socket.id})`);
+      if (transcriber) {
+        transcriber.endTranscriptionStream();
+      }
+    });
+  });
   return io;
 };
 
